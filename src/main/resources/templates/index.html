@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>LeetCode AI Tutor</title>
+
+    <!-- Styles -->
+    <link rel="stylesheet" th:href="@{/tutor.css}"/>
+    <link rel="stylesheet"
+          href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/vs2015.min.css"/>
+
+    <!-- Scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+</head>
+<body>
+
+<!-- Loading Overlay -->
+<div id="loading-overlay">
+    <div class="spinner"></div>
+    <div class="loading-text" id="loading-message">Asking AI Tutor...</div>
+</div>
+
+<div class="container">
+    <h1>⚡ LeetCode AI Tutor</h1>
+
+    <!-- Mode Tabs -->
+    <div class="tabs">
+        <button class="tab-btn active" onclick="setMode('explain')">🧩 LeetCode Problem</button>
+        <button class="tab-btn" onclick="setMode('concept')">📚 Concept Deep Dive</button>
+        <button class="tab-btn" onclick="setMode('hint')">💡 Give Me a Hint</button>
+    </div>
+
+    <!-- Explain Form -->
+    <div class="form-card" id="form-explain">
+        <form method="post" th:action="@{/leetcode/explain}" th:object="${request}"
+              onsubmit="showLoading('Explaining problem...')">
+            <textarea th:field="*{question}"
+                      placeholder="e.g. Explain LeetCode 3649 - Number of Perfect Pairs"></textarea>
+            <div class="error" th:if="${#fields.hasErrors('question')}"
+                 th:errors="*{question}"></div>
+            <button class="submit-btn" type="submit">Ask →</button>
+        </form>
+    </div>
+
+    <!-- Concept Form -->
+    <div class="form-card" id="form-concept" style="display:none">
+        <form method="post" th:action="@{/leetcode/concept}" th:object="${request}"
+              onsubmit="showLoading('Researching concept...')">
+            <textarea th:field="*{question}"
+                      placeholder="e.g. Dijkstra's Algorithm, Dynamic Programming, B-ary Trees"></textarea>
+            <div class="error" th:if="${#fields.hasErrors('question')}"
+                 th:errors="*{question}"></div>
+            <button class="submit-btn" type="submit">Explain →</button>
+        </form>
+    </div>
+
+    <!-- Hint Form -->
+    <div class="form-card" id="form-hint" style="display:none">
+        <form method="post" th:action="@{/leetcode/hint}" th:object="${request}"
+              onsubmit="showLoading('Crafting a hint...')">
+            <textarea th:field="*{question}"
+                      placeholder="e.g. I'm stuck on LeetCode 3649, not sure how to optimize"></textarea>
+            <div class="error" th:if="${#fields.hasErrors('question')}"
+                 th:errors="*{question}"></div>
+            <button class="submit-btn" type="submit">Hint →</button>
+        </form>
+    </div>
+
+    <!-- Response -->
+    <div class="response-card" th:if="${explanation}">
+        <div class="response-card-header">
+            <h2>📖 Explanation</h2>
+            <button class="save-btn" id="save-btn" onclick="saveExplanation()">💾 Save</button>
+        </div>
+        <div id="explanation-content"></div>
+
+        <div class="mermaid-section" th:if="${mermaidDiagram}">
+            <h2>📊 Diagram</h2>
+            <div class="mermaid" th:text="${mermaidDiagram}"></div>
+        </div>
+    </div>
+
+</div>
+
+<script th:inline="javascript">
+    const raw = [[${explanation}]];
+    if (raw) {
+        document.getElementById('explanation-content').innerHTML = marked.parse(raw);
+
+        document.querySelectorAll('#explanation-content pre code').forEach(block => {
+            hljs.highlightElement(block);
+        });
+
+        document.querySelectorAll('#explanation-content pre').forEach(pre => {
+            const btn = document.createElement('button');
+            btn.className = 'copy-btn';
+            btn.textContent = 'Copy';
+
+            btn.addEventListener('click', () => {
+                const code = pre.querySelector('code');
+                navigator.clipboard.writeText(code ? code.innerText : pre.innerText)
+                    .then(() => {
+                        btn.textContent = 'Copied!';
+                        btn.classList.add('copied');
+                        setTimeout(() => {
+                            btn.textContent = 'Copy';
+                            btn.classList.remove('copied');
+                        }, 2000);
+                    })
+                    .catch(() => {
+                        btn.textContent = 'Error';
+                        setTimeout(() => { btn.textContent = 'Copy'; }, 2000);
+                    });
+            });
+
+            pre.appendChild(btn);
+        });
+    }
+
+    mermaid.initialize({ startOnLoad: true, theme: 'dark' });
+
+    function showLoading(message) {
+        document.getElementById('loading-message').textContent = message;
+        document.getElementById('loading-overlay').classList.add('visible');
+        document.querySelectorAll('.submit-btn').forEach(btn => btn.disabled = true);
+    }
+
+    function setMode(mode) {
+        ['explain', 'concept', 'hint'].forEach(m => {
+            document.getElementById('form-' + m).style.display = m === mode ? 'block' : 'none';
+        });
+        document.querySelectorAll('.tab-btn').forEach((btn, i) => {
+            btn.classList.toggle('active', ['explain', 'concept', 'hint'][i] === mode);
+        });
+    }
+
+    function saveExplanation() {
+        const btn            = document.getElementById('save-btn');
+        const title          = /*[[${request.question}]]*/ '';
+        const mermaidContent = /*[[${mermaidDiagram}]]*/ '';
+
+        btn.textContent = '💾 Saving...';
+        btn.disabled = true;
+
+        fetch('/leetcode/save', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: new URLSearchParams({
+                title:          title,
+                content:        raw,
+                mermaidDiagram: mermaidContent ?? ''
+            })
+        })
+        .then(res => res.ok ? res.text() : Promise.reject(res))
+        .then(path => {
+            btn.textContent = '✅ Saved';
+            btn.classList.add('saved');
+            btn.disabled = false;
+            console.log('Saved to:', path);
+            setTimeout(() => {
+                btn.textContent = '💾 Save';
+                btn.classList.remove('saved');
+            }, 2500);
+        })
+        .catch(() => {
+            btn.textContent = '❌ Error';
+            btn.classList.add('error');
+            btn.disabled = false;
+            setTimeout(() => {
+                btn.textContent = '💾 Save';
+                btn.classList.remove('error');
+            }, 2500);
+        });
+    }
+</script>
+</body>
+</html>

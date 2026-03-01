@@ -1,0 +1,9 @@
+langchain4j:
+  anthropic:
+    chat-model:
+      api-key: unset
+      model-name: claude-haiku-4-5
+      max-tokens: 4096
+      log-requests: true
+      log-responses: true
+      cache-system-messages: true
